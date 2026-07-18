@@ -1,0 +1,803 @@
+{
+  "meta": {
+    "as_of": "디자인 예시",
+    "updated_at": "GitHub Actions 실행 후 실제 장 마감 데이터로 교체",
+    "source": "한국경제 데이터센터(FACTSET 업종 분류) + 종목군 필터",
+    "methodology": "KOSPI200 및 KOSDAQ 시가총액 상위 100 종목의 시가총액 가중 업종 수익률",
+    "kospi200_target": 200,
+    "kosdaq100_target": 100,
+    "matched_stocks": 300,
+    "preview_loaded_stocks": 86,
+    "preview_notice": "디자인 확인용으로 상승 TOP5와 하락 TOP5 업종 관련 종목만 수록"
+  },
+  "industries": [
+    {
+      "name": "반도체 및 반도체 장비",
+      "return_pct": 3.9225,
+      "market_cap": 2166285500000000,
+      "advancers": 10,
+      "decliners": 0,
+      "unchanged": 0,
+      "stocks": [
+        {
+          "code": "005930",
+          "name": "삼성전자",
+          "market": "KOSPI200",
+          "price": 184200,
+          "change_pct": 4.07,
+          "market_cap": 1305000000000000
+        },
+        {
+          "code": "000660",
+          "name": "SK하이닉스",
+          "market": "KOSPI200",
+          "price": 632000,
+          "change_pct": 3.77,
+          "market_cap": 667000000000000
+        },
+        {
+          "code": "042700",
+          "name": "한미반도체",
+          "market": "KOSPI200",
+          "price": 70000,
+          "change_pct": 3.6,
+          "market_cap": 123250000000000
+        },
+        {
+          "code": "058470",
+          "name": "리노공업",
+          "market": "KOSDAQ100",
+          "price": 797000,
+          "change_pct": 3.5,
+          "market_cap": 18342500000000
+        },
+        {
+          "code": "403870",
+          "name": "HPSP",
+          "market": "KOSDAQ100",
+          "price": 487000,
+          "change_pct": 3.37,
+          "market_cap": 14007000000000
+        },
+        {
+          "code": "095340",
+          "name": "ISC",
+          "market": "KOSDAQ100",
+          "price": 234000,
+          "change_pct": 3.24,
+          "market_cap": 11339000000000
+        },
+        {
+          "code": "039030",
+          "name": "이오테크닉스",
+          "market": "KOSDAQ100",
+          "price": 553000,
+          "change_pct": 3.1,
+          "market_cap": 9004500000000
+        },
+        {
+          "code": "240810",
+          "name": "원익IPS",
+          "market": "KOSDAQ100",
+          "price": 331000,
+          "change_pct": 2.94,
+          "market_cap": 7337000000000
+        },
+        {
+          "code": "036930",
+          "name": "주성엔지니어링",
+          "market": "KOSDAQ100",
+          "price": 343000,
+          "change_pct": 2.8,
+          "market_cap": 6003000000000
+        },
+        {
+          "code": "089030",
+          "name": "테크윙",
+          "market": "KOSDAQ100",
+          "price": 453000,
+          "change_pct": 2.64,
+          "market_cap": 5002500000000
+        }
+      ]
+    },
+    {
+      "name": "조선 및 해양장비",
+      "return_pct": 3.1343,
+      "market_cap": 1332500000000000,
+      "advancers": 8,
+      "decliners": 0,
+      "unchanged": 0,
+      "stocks": [
+        {
+          "code": "009540",
+          "name": "HD한국조선해양",
+          "market": "KOSPI200",
+          "price": 154000,
+          "change_pct": 3.33,
+          "market_cap": 738000000000000
+        },
+        {
+          "code": "329180",
+          "name": "HD현대중공업",
+          "market": "KOSPI200",
+          "price": 668000,
+          "change_pct": 3.03,
+          "market_cap": 377200000000000
+        },
+        {
+          "code": "042660",
+          "name": "한화오션",
+          "market": "KOSPI200",
+          "price": 66000,
+          "change_pct": 2.86,
+          "market_cap": 69700000000000
+        },
+        {
+          "code": "010140",
+          "name": "삼성중공업",
+          "market": "KOSPI200",
+          "price": 214000,
+          "change_pct": 2.76,
+          "market_cap": 45100000000000
+        },
+        {
+          "code": "010620",
+          "name": "HD현대미포",
+          "market": "KOSPI200",
+          "price": 262000,
+          "change_pct": 2.63,
+          "market_cap": 34440000000000
+        },
+        {
+          "code": "082740",
+          "name": "한화엔진",
+          "market": "KOSPI200",
+          "price": 674000,
+          "change_pct": 2.5,
+          "market_cap": 27880000000000
+        },
+        {
+          "code": "077970",
+          "name": "STX엔진",
+          "market": "KOSPI200",
+          "price": 197000,
+          "change_pct": 2.36,
+          "market_cap": 22140000000000
+        },
+        {
+          "code": "443060",
+          "name": "HD현대마린솔루션",
+          "market": "KOSPI200",
+          "price": 156000,
+          "change_pct": 2.2,
+          "market_cap": 18040000000000
+        }
+      ]
+    },
+    {
+      "name": "전기장비 및 전력기기",
+      "return_pct": 2.539,
+      "market_cap": 1105000000000000,
+      "advancers": 7,
+      "decliners": 1,
+      "unchanged": 0,
+      "stocks": [
+        {
+          "code": "267260",
+          "name": "HD현대일렉트릭",
+          "market": "KOSPI200",
+          "price": 426000,
+          "change_pct": 2.76,
+          "market_cap": 612000000000000
+        },
+        {
+          "code": "298040",
+          "name": "효성중공업",
+          "market": "KOSPI200",
+          "price": 104000,
+          "change_pct": 2.46,
+          "market_cap": 312800000000000
+        },
+        {
+          "code": "010120",
+          "name": "LS ELECTRIC",
+          "market": "KOSPI200",
+          "price": 212000,
+          "change_pct": 2.29,
+          "market_cap": 57800000000000
+        },
+        {
+          "code": "103590",
+          "name": "일진전기",
+          "market": "KOSPI200",
+          "price": 209000,
+          "change_pct": 2.19,
+          "market_cap": 37400000000000
+        },
+        {
+          "code": "062040",
+          "name": "산일전기",
+          "market": "KOSPI200",
+          "price": 304000,
+          "change_pct": 2.06,
+          "market_cap": 28560000000000
+        },
+        {
+          "code": "001440",
+          "name": "대한전선",
+          "market": "KOSPI200",
+          "price": 194000,
+          "change_pct": 1.93,
+          "market_cap": 23120000000000
+        },
+        {
+          "code": "006260",
+          "name": "LS",
+          "market": "KOSPI200",
+          "price": 676000,
+          "change_pct": 1.79,
+          "market_cap": 18360000000000
+        },
+        {
+          "code": "034020",
+          "name": "두산에너빌리티",
+          "market": "KOSPI200",
+          "price": 52000,
+          "change_pct": -0.24,
+          "market_cap": 14960000000000
+        }
+      ]
+    },
+    {
+      "name": "방산 및 항공우주",
+      "return_pct": 2.2386,
+      "market_cap": 1104781300000000,
+      "advancers": 7,
+      "decliners": 0,
+      "unchanged": 0,
+      "stocks": [
+        {
+          "code": "012450",
+          "name": "한화에어로스페이스",
+          "market": "KOSPI200",
+          "price": 445000,
+          "change_pct": 2.4,
+          "market_cap": 639000000000000
+        },
+        {
+          "code": "047810",
+          "name": "한국항공우주",
+          "market": "KOSPI200",
+          "price": 581000,
+          "change_pct": 2.1,
+          "market_cap": 326600000000000
+        },
+        {
+          "code": "079550",
+          "name": "LIG넥스원",
+          "market": "KOSPI200",
+          "price": 355000,
+          "change_pct": 1.93,
+          "market_cap": 60350000000000
+        },
+        {
+          "code": "064350",
+          "name": "현대로템",
+          "market": "KOSPI200",
+          "price": 535000,
+          "change_pct": 1.83,
+          "market_cap": 39050000000000
+        },
+        {
+          "code": "272210",
+          "name": "한화시스템",
+          "market": "KOSPI200",
+          "price": 71000,
+          "change_pct": 1.7,
+          "market_cap": 29820000000000
+        },
+        {
+          "code": "099320",
+          "name": "쎄트렉아이",
+          "market": "KOSDAQ100",
+          "price": 632000,
+          "change_pct": 1.57,
+          "market_cap": 5552200000000
+        },
+        {
+          "code": "218410",
+          "name": "RFHIC",
+          "market": "KOSDAQ100",
+          "price": 641000,
+          "change_pct": 1.43,
+          "market_cap": 4409100000000
+        }
+      ]
+    },
+    {
+      "name": "증권 및 투자서비스",
+      "return_pct": 1.6483,
+      "market_cap": 769440000000000,
+      "advancers": 6,
+      "decliners": 1,
+      "unchanged": 0,
+      "stocks": [
+        {
+          "code": "006800",
+          "name": "미래에셋증권",
+          "market": "KOSPI200",
+          "price": 730000,
+          "change_pct": 1.85,
+          "market_cap": 432000000000000
+        },
+        {
+          "code": "005940",
+          "name": "NH투자증권",
+          "market": "KOSPI200",
+          "price": 644000,
+          "change_pct": 1.55,
+          "market_cap": 220800000000000
+        },
+        {
+          "code": "016360",
+          "name": "삼성증권",
+          "market": "KOSPI200",
+          "price": 836000,
+          "change_pct": 1.38,
+          "market_cap": 40800000000000
+        },
+        {
+          "code": "071050",
+          "name": "한국금융지주",
+          "market": "KOSPI200",
+          "price": 355000,
+          "change_pct": 1.28,
+          "market_cap": 26400000000000
+        },
+        {
+          "code": "039490",
+          "name": "키움증권",
+          "market": "KOSPI200",
+          "price": 599000,
+          "change_pct": 1.15,
+          "market_cap": 20160000000000
+        },
+        {
+          "code": "138040",
+          "name": "메리츠금융지주",
+          "market": "KOSPI200",
+          "price": 254000,
+          "change_pct": 1.02,
+          "market_cap": 16320000000000
+        },
+        {
+          "code": "003540",
+          "name": "대신증권",
+          "market": "KOSPI200",
+          "price": 404000,
+          "change_pct": -0.24,
+          "market_cap": 12960000000000
+        }
+      ]
+    },
+    {
+      "name": "바이오테크놀로지",
+      "return_pct": -0.6283,
+      "market_cap": 1254079200000000,
+      "advancers": 1,
+      "decliners": 8,
+      "unchanged": 0,
+      "stocks": [
+        {
+          "code": "207940",
+          "name": "삼성바이오로직스",
+          "market": "KOSPI200",
+          "price": 444000,
+          "change_pct": -0.53,
+          "market_cap": 792000000000000
+        },
+        {
+          "code": "068270",
+          "name": "셀트리온",
+          "market": "KOSPI200",
+          "price": 77000,
+          "change_pct": -0.77,
+          "market_cap": 404800000000000
+        },
+        {
+          "code": "196170",
+          "name": "알테오젠",
+          "market": "KOSDAQ100",
+          "price": 117000,
+          "change_pct": -0.91,
+          "market_cap": 17204000000000
+        },
+        {
+          "code": "028300",
+          "name": "HLB",
+          "market": "KOSDAQ100",
+          "price": 330000,
+          "change_pct": -0.99,
+          "market_cap": 11132000000000
+        },
+        {
+          "code": "298380",
+          "name": "에이비엘바이오",
+          "market": "KOSDAQ100",
+          "price": 138000,
+          "change_pct": -1.09,
+          "market_cap": 8500800000000
+        },
+        {
+          "code": "141080",
+          "name": "리가켐바이오",
+          "market": "KOSDAQ100",
+          "price": 558000,
+          "change_pct": -1.19,
+          "market_cap": 6881600000000
+        },
+        {
+          "code": "087010",
+          "name": "펩트론",
+          "market": "KOSDAQ100",
+          "price": 251000,
+          "change_pct": -1.31,
+          "market_cap": 5464800000000
+        },
+        {
+          "code": "145020",
+          "name": "휴젤",
+          "market": "KOSDAQ100",
+          "price": 102000,
+          "change_pct": -1.43,
+          "market_cap": 4452800000000
+        },
+        {
+          "code": "214450",
+          "name": "파마리서치",
+          "market": "KOSDAQ100",
+          "price": 245000,
+          "change_pct": 0.31,
+          "market_cap": 3643200000000
+        }
+      ]
+    },
+    {
+      "name": "인터넷 및 게임",
+      "return_pct": -1.0167,
+      "market_cap": 1136944800000000,
+      "advancers": 1,
+      "decliners": 8,
+      "unchanged": 0,
+      "stocks": [
+        {
+          "code": "035420",
+          "name": "NAVER",
+          "market": "KOSPI200",
+          "price": 286000,
+          "change_pct": -0.9,
+          "market_cap": 648000000000000
+        },
+        {
+          "code": "035720",
+          "name": "카카오",
+          "market": "KOSPI200",
+          "price": 72400,
+          "change_pct": -1.14,
+          "market_cap": 331200000000000
+        },
+        {
+          "code": "259960",
+          "name": "크래프톤",
+          "market": "KOSPI200",
+          "price": 546000,
+          "change_pct": -1.28,
+          "market_cap": 61200000000000
+        },
+        {
+          "code": "036570",
+          "name": "엔씨소프트",
+          "market": "KOSPI200",
+          "price": 307000,
+          "change_pct": -1.36,
+          "market_cap": 39600000000000
+        },
+        {
+          "code": "251270",
+          "name": "넷마블",
+          "market": "KOSPI200",
+          "price": 527000,
+          "change_pct": -1.46,
+          "market_cap": 30240000000000
+        },
+        {
+          "code": "293490",
+          "name": "카카오게임즈",
+          "market": "KOSDAQ100",
+          "price": 499000,
+          "change_pct": -1.56,
+          "market_cap": 5630400000000
+        },
+        {
+          "code": "263750",
+          "name": "펄어비스",
+          "market": "KOSDAQ100",
+          "price": 75000,
+          "change_pct": -1.68,
+          "market_cap": 4471200000000
+        },
+        {
+          "code": "112040",
+          "name": "위메이드",
+          "market": "KOSDAQ100",
+          "price": 204000,
+          "change_pct": -1.8,
+          "market_cap": 3643200000000
+        },
+        {
+          "code": "192080",
+          "name": "더블유게임즈",
+          "market": "KOSPI200",
+          "price": 558000,
+          "change_pct": 0.31,
+          "market_cap": 12960000000000
+        }
+      ]
+    },
+    {
+      "name": "자동차 및 자동차부품",
+      "return_pct": -1.5263,
+      "market_cap": 1412980000000000,
+      "advancers": 0,
+      "decliners": 9,
+      "unchanged": 0,
+      "stocks": [
+        {
+          "code": "005380",
+          "name": "현대차",
+          "market": "KOSPI200",
+          "price": 398000,
+          "change_pct": -1.36,
+          "market_cap": 774000000000000
+        },
+        {
+          "code": "000270",
+          "name": "기아",
+          "market": "KOSPI200",
+          "price": 176500,
+          "change_pct": -1.6,
+          "market_cap": 395600000000000
+        },
+        {
+          "code": "012330",
+          "name": "현대모비스",
+          "market": "KOSPI200",
+          "price": 433000,
+          "change_pct": -1.74,
+          "market_cap": 73100000000000
+        },
+        {
+          "code": "018880",
+          "name": "한온시스템",
+          "market": "KOSPI200",
+          "price": 238000,
+          "change_pct": -1.82,
+          "market_cap": 47300000000000
+        },
+        {
+          "code": "204320",
+          "name": "HL만도",
+          "market": "KOSPI200",
+          "price": 82000,
+          "change_pct": -1.92,
+          "market_cap": 36120000000000
+        },
+        {
+          "code": "161390",
+          "name": "한국타이어앤테크놀로지",
+          "market": "KOSPI200",
+          "price": 889000,
+          "change_pct": -2.02,
+          "market_cap": 29240000000000
+        },
+        {
+          "code": "011210",
+          "name": "현대위아",
+          "market": "KOSPI200",
+          "price": 321000,
+          "change_pct": -2.14,
+          "market_cap": 23220000000000
+        },
+        {
+          "code": "005850",
+          "name": "에스엘",
+          "market": "KOSPI200",
+          "price": 635000,
+          "change_pct": -2.26,
+          "market_cap": 18920000000000
+        },
+        {
+          "code": "073240",
+          "name": "금호타이어",
+          "market": "KOSPI200",
+          "price": 574000,
+          "change_pct": -2.38,
+          "market_cap": 15480000000000
+        }
+      ]
+    },
+    {
+      "name": "화학 및 이차전지 소재",
+      "return_pct": -1.8691,
+      "market_cap": 1059288000000000,
+      "advancers": 0,
+      "decliners": 9,
+      "unchanged": 0,
+      "stocks": [
+        {
+          "code": "051910",
+          "name": "LG화학",
+          "market": "KOSPI200",
+          "price": 141000,
+          "change_pct": -1.72,
+          "market_cap": 621000000000000
+        },
+        {
+          "code": "003670",
+          "name": "포스코퓨처엠",
+          "market": "KOSPI200",
+          "price": 417000,
+          "change_pct": -1.96,
+          "market_cap": 317400000000000
+        },
+        {
+          "code": "247540",
+          "name": "에코프로비엠",
+          "market": "KOSDAQ100",
+          "price": 154000,
+          "change_pct": -2.1,
+          "market_cap": 13489500000000
+        },
+        {
+          "code": "086520",
+          "name": "에코프로",
+          "market": "KOSDAQ100",
+          "price": 202000,
+          "change_pct": -2.18,
+          "market_cap": 8728500000000
+        },
+        {
+          "code": "066970",
+          "name": "엘앤에프",
+          "market": "KOSPI200",
+          "price": 797000,
+          "change_pct": -2.28,
+          "market_cap": 28980000000000
+        },
+        {
+          "code": "011170",
+          "name": "롯데케미칼",
+          "market": "KOSPI200",
+          "price": 317000,
+          "change_pct": -2.38,
+          "market_cap": 23460000000000
+        },
+        {
+          "code": "011780",
+          "name": "금호석유",
+          "market": "KOSPI200",
+          "price": 378000,
+          "change_pct": -2.5,
+          "market_cap": 18630000000000
+        },
+        {
+          "code": "005070",
+          "name": "코스모신소재",
+          "market": "KOSPI200",
+          "price": 557000,
+          "change_pct": -2.62,
+          "market_cap": 15180000000000
+        },
+        {
+          "code": "011790",
+          "name": "SKC",
+          "market": "KOSPI200",
+          "price": 379000,
+          "change_pct": -2.74,
+          "market_cap": 12420000000000
+        }
+      ]
+    },
+    {
+      "name": "유통 및 소비재",
+      "return_pct": -2.8051,
+      "market_cap": 1011380000000000,
+      "advancers": 0,
+      "decliners": 10,
+      "unchanged": 0,
+      "stocks": [
+        {
+          "code": "090430",
+          "name": "아모레퍼시픽",
+          "market": "KOSPI200",
+          "price": 593000,
+          "change_pct": -2.63,
+          "market_cap": 549000000000000
+        },
+        {
+          "code": "051900",
+          "name": "LG생활건강",
+          "market": "KOSPI200",
+          "price": 140000,
+          "change_pct": -2.87,
+          "market_cap": 280600000000000
+        },
+        {
+          "code": "139480",
+          "name": "이마트",
+          "market": "KOSPI200",
+          "price": 398000,
+          "change_pct": -3.01,
+          "market_cap": 51850000000000
+        },
+        {
+          "code": "004170",
+          "name": "신세계",
+          "market": "KOSPI200",
+          "price": 467000,
+          "change_pct": -3.09,
+          "market_cap": 33550000000000
+        },
+        {
+          "code": "282330",
+          "name": "BGF리테일",
+          "market": "KOSPI200",
+          "price": 233000,
+          "change_pct": -3.19,
+          "market_cap": 25620000000000
+        },
+        {
+          "code": "271560",
+          "name": "오리온",
+          "market": "KOSPI200",
+          "price": 856000,
+          "change_pct": -3.29,
+          "market_cap": 20740000000000
+        },
+        {
+          "code": "097950",
+          "name": "CJ제일제당",
+          "market": "KOSPI200",
+          "price": 495000,
+          "change_pct": -3.41,
+          "market_cap": 16470000000000
+        },
+        {
+          "code": "000080",
+          "name": "하이트진로",
+          "market": "KOSPI200",
+          "price": 58000,
+          "change_pct": -3.53,
+          "market_cap": 13420000000000
+        },
+        {
+          "code": "383220",
+          "name": "F&F",
+          "market": "KOSPI200",
+          "price": 122000,
+          "change_pct": -3.65,
+          "market_cap": 10980000000000
+        },
+        {
+          "code": "192820",
+          "name": "코스맥스",
+          "market": "KOSPI200",
+          "price": 632000,
+          "change_pct": -3.77,
+          "market_cap": 9150000000000
+        }
+      ]
+    }
+  ]
+}

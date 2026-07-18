@@ -1,0 +1,4 @@
+pandas>=2.2,<3
+playwright==1.61.0
+pykrx==1.2.8
+requests>=2.32,<3

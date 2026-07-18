@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light dark" />
+  <title>한국 주식 업종 TOP 5 대시보드</title>
+  <meta name="description" content="코스피200 및 코스닥 시가총액 상위 100 종목의 상승 업종 TOP 5와 하락 업종 TOP 5" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="shell">
+    <section class="controls" aria-label="시장 필터 및 검색">
+      <div class="segmented" role="group" aria-label="시장 선택">
+        <button type="button" data-market="ALL" class="active">통합</button>
+        <button type="button" data-market="KOSPI200">코스피200</button>
+        <button type="button" data-market="KOSDAQ100">코스닥100</button>
+      </div>
+      <label class="search-box">
+        <span class="sr-only">업종 또는 종목 검색</span>
+        <input id="searchInput" type="search" placeholder="전체 300종목에서 업종·기업명 검색" autocomplete="off" />
+      </label>
+      <button id="clearSearchButton" class="secondary-button" type="button" hidden>검색 초기화</button>
+    </section>
+
+    <section class="notice-strip">
+      <strong>기본 화면은 10개 업종만 표시합니다.</strong>
+      <span>상승률 상위 5개 + 하락률 하위 5개 · 업종을 누르면 해당 업종의 대상 기업을 모두 표시</span>
+    </section>
+
+    <section id="rankingView" class="ranking-grid" aria-live="polite">
+      <section class="ranking-section" aria-labelledby="gainerHeading">
+        <header class="ranking-heading">
+          <div>
+            <span class="ranking-kicker positive">GAINERS</span>
+            <h2 id="gainerHeading">상승률 TOP 5</h2>
+          </div>
+          <span id="gainerIncludedCount" class="included-count">-</span>
+        </header>
+        <div id="gainerList" class="sector-list"></div>
+      </section>
+
+      <section class="ranking-section" aria-labelledby="loserHeading">
+        <header class="ranking-heading">
+          <div>
+            <span class="ranking-kicker negative">LOSERS</span>
+            <h2 id="loserHeading">하락률 TOP 5</h2>
+          </div>
+          <span id="loserIncludedCount" class="included-count">-</span>
+        </header>
+        <div id="loserList" class="sector-list"></div>
+      </section>
+    </section>
+
+    <section id="searchView" hidden aria-live="polite">
+      <header class="search-result-heading">
+        <div>
+          <span class="ranking-kicker">SEARCH</span>
+          <h2>전체 데이터 검색 결과</h2>
+        </div>
+        <span id="searchResultCount" class="included-count">-</span>
+      </header>
+      <div id="searchResultList" class="sector-list"></div>
+    </section>
+
+    <section id="emptyState" class="empty-state" hidden>
+      <strong>검색 결과가 없습니다.</strong>
+      <span>다른 업종명, 종목명 또는 6자리 종목코드를 입력해 보세요.</span>
+    </section>
+
+    <footer>
+      <span id="asOfText">데이터를 불러오는 중입니다.</span>
+      <span id="sourceText">데이터 출처 확인 중</span>
+      <span>평일 16:05 KST GitHub Actions 자동 갱신</span>
+    </footer>
+  </main>
+
+  <template id="sectorTemplate">
+    <article class="sector-card">
+      <button class="sector-head" type="button" aria-expanded="false">
+        <div class="rank-badge"></div>
+        <div class="sector-title-wrap">
+          <div class="sector-title-line">
+            <h3 class="sector-name"></h3>
+            <span class="sector-market-badge"></span>
+          </div>
+          <div class="sector-sub"></div>
+        </div>
+        <div class="sector-performance">
+          <strong class="sector-return"></strong>
+          <span class="chevron" aria-hidden="true">⌄</span>
+        </div>
+      </button>
+      <div class="sector-body" hidden>
+        <div class="breadth-row">
+          <div><span>상승</span><strong class="advancers positive"></strong></div>
+          <div><span>보합</span><strong class="unchanged"></strong></div>
+          <div><span>하락</span><strong class="decliners negative"></strong></div>
+          <div><span>업종 시총</span><strong class="sector-cap"></strong></div>
+        </div>
+        <div class="stock-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>기업</th>
+                <th>시장</th>
+                <th class="num">현재가</th>
+                <th class="num">등락률</th>
+                <th class="num hide-mobile">시가총액</th>
+              </tr>
+            </thead>
+            <tbody class="stock-rows"></tbody>
+          </table>
+        </div>
+      </div>
+    </article>
+  </template>
+
+  <script src="app.js" defer></script>
+</body>
+</html>
