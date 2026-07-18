@@ -1,7 +1,7 @@
 {
   "meta": {
     "as_of": "2026-07-18",
-    "updated_at": "2026-07-18 16:43 KST",
+    "updated_at": "2026-07-18 16:58 KST",
     "source": "한국경제 데이터센터(FACTSET 업종 분류) + KRX",
     "methodology": "KOSPI200 및 KOSDAQ 시가총액 상위 100 종목, KRX 종가·시가총액 기준 시가총액 가중 업종 수익률",
     "kospi200_target": 199,
