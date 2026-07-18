@@ -24,9 +24,6 @@ jobs:
 
       - name: 필수 파일 확인
         run: |
-          echo "저장소 파일 목록"
-          find . -maxdepth 3 -type f | sort
-
           test -f requirements.txt || (
             echo "requirements.txt가 없습니다."
             exit 1
@@ -37,7 +34,8 @@ jobs:
             exit 1
           )
 
-          mkdir -p data
+          mkdir -p scripts data
+          cp update_data.py scripts/update_data.py
 
       - name: Python 설정
         uses: actions/setup-python@v5
@@ -51,11 +49,26 @@ jobs:
           pip install -r requirements.txt
           python -m playwright install --with-deps chromium
 
+      - name: KRX 로그인 정보 확인
+        env:
+          KRX_ID: ${{ secrets.KRX_ID }}
+          KRX_PW: ${{ secrets.KRX_PW }}
+        run: |
+          if [ -z "$KRX_ID" ] || [ -z "$KRX_PW" ]; then
+            echo "KRX_ID 또는 KRX_PW GitHub Secret이 없습니다."
+            echo "Settings → Secrets and variables → Actions에서 등록하세요."
+            exit 1
+          fi
+
+          echo "KRX 로그인 Secret 확인 완료"
+
       - name: 장 마감 데이터 생성
         env:
           TZ: Asia/Seoul
           MIN_MATCHED_STOCKS: "250"
-        run: python update_data.py
+          KRX_ID: ${{ secrets.KRX_ID }}
+          KRX_PW: ${{ secrets.KRX_PW }}
+        run: python scripts/update_data.py
 
       - name: 생성 결과 확인
         run: |
