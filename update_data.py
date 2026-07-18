@@ -33,6 +33,8 @@ from pykrx import stock
 
 SEOUL = ZoneInfo("Asia/Seoul")
 ROOT = Path(__file__).resolve().parent
+if ROOT.name == "scripts":
+    ROOT = ROOT.parent
 OUTPUT = ROOT / "data" / "data.json"
 DIAGNOSTICS = ROOT / "data" / "diagnostics.json"
 SOURCE_URL = "https://datacenter.hankyung.com/equities-all"
@@ -609,18 +611,88 @@ def get_market_frame(date: str, market: str) -> pd.DataFrame:
     return cap
 
 
+def _six_digit_codes(values: Iterable[Any], allowed: set[str] | None = None) -> set[str]:
+    """Normalize an iterable/index into valid six-digit Korean stock codes."""
+    result: set[str] = set()
+    for value in values:
+        code = normalize_code(value)
+        if code and (allowed is None or code in allowed):
+            result.add(code)
+    return result
+
+
+def get_kospi200(date: str, kospi_frame: pd.DataFrame) -> tuple[set[str], str]:
+    """Load KOSPI 200 constituents with an ETF-holdings fallback.
+
+    KRX's index portfolio endpoint can return an empty list even after login
+    under the current KRX policy. KODEX 200 (069500) tracks KOSPI 200, so its
+    portfolio deposit file is used only when the direct index endpoint is empty.
+    Only six-digit tickers that are present in the KOSPI market frame are kept.
+    """
+    allowed = set(kospi_frame.index.astype(str))
+    direct: set[str] = set()
+
+    try:
+        direct = _six_digit_codes(
+            stock.get_index_portfolio_deposit_file("1028", date),
+            allowed,
+        )
+    except Exception as exc:
+        print(f"WARNING: KOSPI 200 직접 구성종목 조회 실패: {exc}")
+
+    print(f"KOSPI 200 직접 조회: {len(direct)}개")
+    if len(direct) >= 180:
+        return direct, "KRX 코스피200 지수 구성종목"
+
+    # Current KRX login policy can leave get_index_portfolio_deposit_file empty.
+    # KODEX 200's PDF is a practical KRX-backed fallback for the same benchmark.
+    etf_codes: set[str] = set()
+    try:
+        pdf = stock.get_etf_portfolio_deposit_file("069500", date)
+        if pdf is not None and not pdf.empty:
+            etf_codes |= _six_digit_codes(pdf.index, allowed)
+
+            # Be tolerant if a future pykrx version exposes ticker codes in a column.
+            for column in ("티커", "종목코드", "단축코드", "code", "ticker"):
+                if column in pdf.columns:
+                    etf_codes |= _six_digit_codes(pdf[column], allowed)
+    except Exception as exc:
+        print(f"WARNING: KODEX 200 구성종목 조회 실패: {exc}")
+
+    print(f"KODEX 200 대체 조회: {len(etf_codes)}개")
+    if len(etf_codes) >= 180:
+        return etf_codes, "KRX KODEX 200 PDF 대체"
+
+    raise RuntimeError(
+        "KOSPI 200 구성종목을 확보하지 못했습니다. "
+        f"직접 조회 {len(direct)}개, KODEX 200 대체 조회 {len(etf_codes)}개"
+    )
+
+
 def get_universe(date: str) -> tuple[set[str], set[str], pd.DataFrame]:
-    kospi200 = set(map(str, stock.get_index_portfolio_deposit_file("1028", date)))
+    # Market frames are loaded first because they are also used to validate
+    # constituent tickers returned by the two KOSPI 200 methods.
+    kospi_frame = get_market_frame(date, "KOSPI")
     kosdaq_frame = get_market_frame(date, "KOSDAQ")
+
+    kospi200, kospi200_source = get_kospi200(date, kospi_frame)
+
     if "시가총액" not in kosdaq_frame.columns:
         raise RuntimeError("KRX 코스닥 데이터에 시가총액 열이 없습니다.")
     kosdaq100 = set(
         kosdaq_frame.sort_values("시가총액", ascending=False).head(100).index.astype(str)
     )
 
-    kospi_frame = get_market_frame(date, "KOSPI")
+    if len(kosdaq100) < 100:
+        raise RuntimeError(f"코스닥 시가총액 상위 종목이 {len(kosdaq100)}개만 조회됐습니다.")
+
     all_market = pd.concat([kospi_frame, kosdaq_frame], axis=0)
     all_market = all_market[~all_market.index.duplicated(keep="first")]
+
+    print(
+        f"대상 종목군: KOSPI200 {len(kospi200)}개 "
+        f"({kospi200_source}), KOSDAQ100 {len(kosdaq100)}개"
+    )
     return kospi200, kosdaq100, all_market
 
 
