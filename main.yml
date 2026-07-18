@@ -1,0 +1,115 @@
+name: 산업별 시장 대시보드 갱신
+
+on:
+  workflow_dispatch:
+  schedule:
+    # UTC 07:05 = 한국시간 16:05
+    - cron: "5 7 * * 1-5"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sector-dashboard-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: 저장소 받기
+        uses: actions/checkout@v4
+
+      - name: 필수 파일 확인
+        run: |
+          test -f update_data.py || (
+            echo "저장소 루트에 update_data.py가 없습니다."
+            exit 1
+          )
+          test -f requirements.txt || (
+            echo "requirements.txt가 없습니다."
+            exit 1
+          )
+          mkdir -p data
+
+      - name: Python 설정
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: 패키지 설치
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: KRX 로그인 정보 확인
+        env:
+          KRX_ID: ${{ secrets.KRX_ID }}
+          KRX_PW: ${{ secrets.KRX_PW }}
+        run: |
+          if [ -z "$KRX_ID" ] || [ -z "$KRX_PW" ]; then
+            echo "KRX_ID 또는 KRX_PW Secret이 없습니다."
+            exit 1
+          fi
+          echo "KRX Secret 확인 완료"
+
+      - name: 장 마감 데이터 생성
+        env:
+          TZ: Asia/Seoul
+          KRX_ID: ${{ secrets.KRX_ID }}
+          KRX_PW: ${{ secrets.KRX_PW }}
+          MIN_MATCHED_STOCKS: "250"
+        run: python update_data.py
+
+      - name: 진단 파일 업로드
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hankyung-collector-diagnostics
+          path: data/diagnostics.json
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: 생성 결과 확인
+        if: success()
+        run: |
+          test -f data/data.json || (
+            echo "data/data.json이 생성되지 않았습니다."
+            exit 1
+          )
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          data = json.loads(Path("data/data.json").read_text(encoding="utf-8"))
+          matched = int(data.get("meta", {}).get("matched_stocks", 0))
+          industries = data.get("industries", [])
+
+          print(f"매칭 종목: {matched}개")
+          print(f"산업 수: {len(industries)}개")
+
+          if matched < 250:
+              raise SystemExit(f"매칭 종목이 너무 적습니다: {matched}개")
+          if not industries:
+              raise SystemExit("산업 데이터가 비어 있습니다.")
+          PY
+
+      - name: 변경 파일 커밋
+        if: success()
+        run: |
+          git add data/data.json
+
+          if git diff --cached --quiet; then
+            echo "변경된 데이터가 없습니다."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: 장 마감 산업 데이터 갱신"
+          git push
