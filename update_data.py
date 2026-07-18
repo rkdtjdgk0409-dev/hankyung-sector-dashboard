@@ -388,72 +388,130 @@ def request_text(session: requests.Session, url: str) -> str:
     return response.text
 
 
+def parse_naver_item_industry(html: str) -> str | None:
+    """종목 상세 페이지의 '동종업종비교(업종명: ...)' 영역에서 업종 추출."""
+
+    soup = BeautifulSoup(html, "html.parser")
+
+    # 가장 안정적인 경로: 업종명 링크 자체를 선택합니다.
+    selectors = (
+        'a[href*="sise_group_detail.naver"][href*="type=upjong"]',
+        'a[href*="sise_group_detail.nhn"][href*="type=upjong"]',
+    )
+
+    for selector in selectors:
+        for link in soup.select(selector):
+            candidate = clean_industry(link.get_text(" ", strip=True))
+            if candidate:
+                return candidate
+
+    # 마크업이 바뀐 경우에도 "업종명 :" 주변의 다음 링크를 확인합니다.
+    for text_node in soup.find_all(
+        string=re.compile(r"업종명\s*:", re.IGNORECASE),
+    ):
+        parent = text_node.parent
+        if parent is None:
+            continue
+
+        for link in parent.find_all("a"):
+            candidate = clean_industry(link.get_text(" ", strip=True))
+            if candidate:
+                return candidate
+
+        next_link = parent.find_next("a")
+        if next_link is not None:
+            candidate = clean_industry(next_link.get_text(" ", strip=True))
+            if candidate:
+                return candidate
+
+    # 마지막 보완: 페이지 전체 텍스트에서 업종명과 재무정보 사이를 추출합니다.
+    page_text = soup.get_text(" ", strip=True)
+    patterns = (
+        r"업종명\s*:\s*(.+?)\s*(?:｜|\||재무정보)",
+        r"동종업종비교\s*\(\s*업종명\s*:\s*(.+?)\s*\)",
+    )
+
+    for pattern in patterns:
+        match = re.search(pattern, page_text, flags=re.IGNORECASE)
+        if not match:
+            continue
+
+        candidate = clean_industry(match.group(1))
+        if candidate:
+            return candidate
+
+    return None
+
+
+def fetch_naver_item_industry(code: str) -> IndustrySource | None:
+    """업종 목록 페이지 대신 개별 종목 페이지에서 업종을 직접 조회."""
+
+    last_error: Exception | None = None
+
+    for attempt in range(3):
+        session = requests.Session()
+
+        try:
+            response = session.get(
+                NAVER_ITEM_URL.format(code=code),
+                headers=HEADERS,
+                timeout=25,
+            )
+            response.raise_for_status()
+
+            # 네이버 금융 구형 페이지는 EUC-KR인 경우가 있어 명시적으로 보완합니다.
+            content_type = response.headers.get("content-type", "").lower()
+            if "charset=" not in content_type:
+                response.encoding = response.apparent_encoding or "euc-kr"
+
+            industry = parse_naver_item_industry(response.text)
+            if industry:
+                return IndustrySource(
+                    industry=industry,
+                    source="네이버 금융 종목별 업종 보완",
+                )
+
+            last_error = RuntimeError("종목 페이지에서 업종명을 찾지 못했습니다.")
+        except Exception as exc:
+            last_error = exc
+
+        if attempt < 2:
+            time.sleep(0.6 * (attempt + 1))
+
+    print(f"WARNING: 네이버 종목별 업종 조회 실패({code}): {last_error}")
+    return None
+
+
 def collect_naver_industries(
     eligible: set[str],
 ) -> dict[str, IndustrySource]:
-    session = requests.Session()
-    html = request_text(session, NAVER_UPJONG_URL)
-    soup = BeautifulSoup(html, "html.parser")
+    """각 종목 상세 페이지에서 업종을 직접 수집합니다.
 
-    sector_links: dict[str, str] = {}
-    for link in soup.select(
-        'a[href*="sise_group_detail.naver"][href*="type=upjong"]'
-    ):
-        industry = clean_industry(link.get_text(" ", strip=True))
-        href = link.get("href", "")
-        if industry and "no=" in href:
-            sector_links[industry] = urljoin(NAVER_UPJONG_URL, href)
-
-    if len(sector_links) < 20:
-        raise RuntimeError(
-            f"네이버 업종 목록이 너무 적습니다: {len(sector_links)}개"
-        )
-
-    def parse_sector(
-        industry: str,
-        url: str,
-    ) -> dict[str, IndustrySource]:
-        local_session = requests.Session()
-        detail_html = request_text(local_session, url)
-        detail_soup = BeautifulSoup(detail_html, "html.parser")
-        result: dict[str, IndustrySource] = {}
-
-        for link in detail_soup.select(
-            'a[href*="/item/main.naver?code="],'
-            'a[href*="item/main.naver?code="]'
-        ):
-            match = re.search(r"[?&]code=(\d{6})", link.get("href", ""))
-            if not match:
-                continue
-
-            code = match.group(1)
-            if code in eligible:
-                result[code] = IndustrySource(
-                    industry=industry,
-                    source="네이버 금융 업종 보완",
-                )
-
-        return result
+    기존 업종 목록 페이지는 마크업 변경으로 링크가 1개만 잡히는 문제가
+    발생했으므로 더 이상 사용하지 않습니다.
+    """
 
     mapping: dict[str, IndustrySource] = {}
+
     with ThreadPoolExecutor(max_workers=8) as executor:
         futures = {
-            executor.submit(parse_sector, industry, url): industry
-            for industry, url in sector_links.items()
+            executor.submit(fetch_naver_item_industry, code): code
+            for code in eligible
         }
 
         for future in as_completed(futures):
-            industry = futures[future]
+            code = futures[future]
+
             try:
-                sector_mapping = future.result()
+                source = future.result()
             except Exception as exc:
-                print(f"WARNING: 네이버 업종 조회 실패({industry}): {exc}")
+                print(f"WARNING: 네이버 종목별 업종 작업 실패({code}): {exc}")
                 continue
 
-            for code, source in sector_mapping.items():
-                mapping.setdefault(code, source)
+            if source is not None:
+                mapping[code] = source
 
-    print(f"네이버 업종 매핑: {len(mapping)}/{len(eligible)}개")
+    print(f"네이버 종목별 업종 매핑: {len(mapping)}/{len(eligible)}개")
     return mapping
 
 
