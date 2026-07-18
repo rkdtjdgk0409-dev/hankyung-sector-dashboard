@@ -16,7 +16,7 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 25
 
     steps:
       - name: 저장소 받기
@@ -24,14 +24,16 @@ jobs:
 
       - name: 필수 파일 확인
         run: |
-          test -f update_data.py || (
-            echo "저장소 루트에 update_data.py가 없습니다."
-            exit 1
-          )
           test -f requirements.txt || (
             echo "requirements.txt가 없습니다."
             exit 1
           )
+
+          test -f update_data.py || (
+            echo "루트의 update_data.py가 없습니다."
+            exit 1
+          )
+
           mkdir -p data
 
       - name: Python 설정
@@ -52,30 +54,20 @@ jobs:
           KRX_PW: ${{ secrets.KRX_PW }}
         run: |
           if [ -z "$KRX_ID" ] || [ -z "$KRX_PW" ]; then
-            echo "KRX_ID 또는 KRX_PW Secret이 없습니다."
+            echo "KRX_ID 또는 KRX_PW GitHub Secret이 없습니다."
             exit 1
           fi
-          echo "KRX Secret 확인 완료"
+          echo "KRX 로그인 Secret 확인 완료"
 
       - name: 장 마감 데이터 생성
         env:
           TZ: Asia/Seoul
+          MIN_MATCHED_STOCKS: "250"
           KRX_ID: ${{ secrets.KRX_ID }}
           KRX_PW: ${{ secrets.KRX_PW }}
-          MIN_MATCHED_STOCKS: "250"
         run: python update_data.py
 
-      - name: 진단 파일 업로드
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: hankyung-collector-diagnostics
-          path: data/diagnostics.json
-          if-no-files-found: warn
-          retention-days: 7
-
       - name: 생성 결과 확인
-        if: success()
         run: |
           test -f data/data.json || (
             echo "data/data.json이 생성되지 않았습니다."
@@ -86,21 +78,39 @@ jobs:
           import json
           from pathlib import Path
 
-          data = json.loads(Path("data/data.json").read_text(encoding="utf-8"))
-          matched = int(data.get("meta", {}).get("matched_stocks", 0))
+          path = Path("data/data.json")
+          data = json.loads(path.read_text(encoding="utf-8"))
+          meta = data.get("meta", {})
+          matched = meta.get("matched_stocks", 0)
+          kospi_count = meta.get("kospi200_target", 0)
+          kosdaq_count = meta.get("kosdaq100_target", 0)
           industries = data.get("industries", [])
 
+          print(f"KOSPI200 대상: {kospi_count}개")
+          print(f"KOSDAQ100 대상: {kosdaq_count}개")
           print(f"매칭 종목: {matched}개")
           print(f"산업 수: {len(industries)}개")
 
+          if kospi_count < 180:
+              raise SystemExit(f"KOSPI200 구성종목이 너무 적습니다: {kospi_count}개")
+          if kosdaq_count < 100:
+              raise SystemExit(f"KOSDAQ100 구성종목이 너무 적습니다: {kosdaq_count}개")
           if matched < 250:
               raise SystemExit(f"매칭 종목이 너무 적습니다: {matched}개")
           if not industries:
               raise SystemExit("산업 데이터가 비어 있습니다.")
           PY
 
+      - name: 진단 파일 업로드
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hankyung-diagnostics
+          path: data/diagnostics.json
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: 변경 파일 커밋
-        if: success()
         run: |
           git add data/data.json
 
