@@ -226,9 +226,12 @@ class MarketData:
 
 
 class HankyungCollector:
+    """한경 페이지의 JSON 응답과 렌더링된 산업 그룹을 함께 수집합니다."""
+
     def __init__(self) -> None:
         self.payloads: list[Any] = []
         self.urls: list[str] = []
+        self.dom_candidates: list[dict[str, Any]] = []
         self._fingerprints: set[str] = set()
 
     def _append(self, payload: Any, source: str) -> None:
@@ -267,7 +270,297 @@ class HankyungCollector:
         except Exception:
             return
 
-    async def collect(self) -> tuple[list[Any], list[str]]:
+    async def _click_market(self, page, label: str) -> None:
+        for locator in (
+            page.get_by_role("tab", name=label, exact=True),
+            page.get_by_role("button", name=label, exact=True),
+            page.get_by_text(label, exact=True),
+        ):
+            try:
+                if await locator.count():
+                    await locator.first.click(timeout=5_000)
+                    await page.wait_for_timeout(1_800)
+                    return
+            except Exception:
+                continue
+
+    async def _expand_and_scroll(self, page) -> None:
+        for _ in range(5):
+            clicked = False
+
+            for label in ("더보기", "전체보기", "펼치기"):
+                locator = page.get_by_text(label, exact=True)
+                try:
+                    count = min(await locator.count(), 30)
+                    for index in range(count):
+                        item = locator.nth(index)
+                        try:
+                            if await item.is_visible():
+                                await item.click(timeout=1_500)
+                                await page.wait_for_timeout(180)
+                                clicked = True
+                        except Exception:
+                            continue
+                except Exception:
+                    continue
+
+            previous_height = -1
+            stable_count = 0
+
+            for _ in range(50):
+                height = await page.evaluate(
+                    "document.documentElement.scrollHeight"
+                )
+                await page.evaluate(
+                    "window.scrollTo(0, document.documentElement.scrollHeight)"
+                )
+                await page.wait_for_timeout(250)
+
+                if height == previous_height:
+                    stable_count += 1
+                    if stable_count >= 3:
+                        break
+                else:
+                    stable_count = 0
+
+                previous_height = height
+
+            await page.evaluate("window.scrollTo(0, 0)")
+            if not clicked:
+                break
+
+    async def _extract_dom_candidates(self, page, market: str) -> None:
+        candidates = await page.evaluate(
+            r"""
+            (market) => {
+              const generic = new Set([
+                '', 'sub', 'main', 'data', 'list', 'item', 'items',
+                'content', 'contents', 'result', 'results', 'row', 'rows',
+                'stock', 'stocks', 'company', 'companies', '전체', '한국',
+                '코스피', '코스닥', '코스피200', '코스피 200', '시장',
+                '상승', '하락', '보합', '검색', '전종목 시세',
+                '종목검색', '데이터센터'
+              ]);
+
+              const cleanText = (value) => String(value || '')
+                .replace(/\s+/g, ' ')
+                .replace(/^[\s|/·\-]+|[\s|/·\-]+$/g, '')
+                .trim();
+
+              const normalize = (value) => cleanText(value)
+                .toLowerCase()
+                .replace(/[^0-9a-z가-힣]/g, '');
+
+              const validLabel = (value) => {
+                const text = cleanText(value);
+                if (!text || text.length > 70) return null;
+                if (generic.has(text) || generic.has(normalize(text))) return null;
+                if (/\d{6}/.test(text) || /%/.test(text)) return null;
+                if (/^[+\-]?\d+(?:\.\d+)?$/.test(text)) return null;
+                if (/^(현재가|등락률|시가총액|거래량|종목명|코드)$/.test(text)) {
+                  return null;
+                }
+                return text;
+              };
+
+              const codeFrom = (element) => {
+                const values = [
+                  element && element.getAttribute && element.getAttribute('href'),
+                  element && element.getAttribute && element.getAttribute('data-code'),
+                  element && element.getAttribute && element.getAttribute('data-symbol'),
+                  element && element.getAttribute && element.getAttribute('data-ticker'),
+                  element && element.getAttribute && element.getAttribute('aria-label'),
+                  element && element.textContent,
+                ];
+
+                for (const value of values) {
+                  const match = String(value || '').match(/(?:^|\D)(\d{6})(?:\D|$)/);
+                  if (match) return match[1];
+                }
+
+                return null;
+              };
+
+              const stockSelector = [
+                'a[href]', '[data-code]', '[data-symbol]', '[data-ticker]'
+              ].join(',');
+
+              const stockElements = [];
+              const seenCodes = new Set();
+
+              for (const element of document.querySelectorAll(stockSelector)) {
+                const code = codeFrom(element);
+                if (!code || seenCodes.has(code)) continue;
+                seenCodes.add(code);
+                stockElements.push({ code, element });
+              }
+
+              const codeCache = new WeakMap();
+
+              const codesUnder = (node) => {
+                if (!node || !(node instanceof Element)) return [];
+                if (codeCache.has(node)) return codeCache.get(node);
+
+                const result = new Set();
+                const ownCode = codeFrom(node);
+                if (ownCode) result.add(ownCode);
+
+                for (const element of node.querySelectorAll(stockSelector)) {
+                  const code = codeFrom(element);
+                  if (code) result.add(code);
+                }
+
+                const values = [...result];
+                codeCache.set(node, values);
+                return values;
+              };
+
+              const labelCandidates = (container, stockElement) => {
+                const result = [];
+                const stockTop = stockElement.getBoundingClientRect().top
+                  + window.scrollY;
+
+                const selectors = [
+                  'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+                  '[role="heading"]', 'summary', 'button', 'caption',
+                  'legend', 'dt', 'th',
+                  '[class*="title"]', '[class*="heading"]',
+                  '[class*="industry"]', '[class*="sector"]',
+                  '[class*="category"]', '[class*="group"]'
+                ].join(',');
+
+                const nodes = [...container.querySelectorAll(selectors)].slice(0, 250);
+
+                for (const node of nodes) {
+                  if (codesUnder(node).length > 0) continue;
+
+                  const label = validLabel(node.textContent);
+                  if (!label) continue;
+
+                  const top = node.getBoundingClientRect().top + window.scrollY;
+                  if (top > stockTop + 80) continue;
+
+                  let score = 0;
+                  const tag = node.tagName.toLowerCase();
+                  const className = String(node.className || '').toLowerCase();
+
+                  if (/^h[1-6]$/.test(tag) || node.getAttribute('role') === 'heading') {
+                    score += 30;
+                  }
+                  if (tag === 'summary' || tag === 'caption' || tag === 'legend') {
+                    score += 26;
+                  }
+                  if (tag === 'button') score += 20;
+                  if (/industry|sector|category|group/.test(className)) score += 25;
+                  if (/title|heading/.test(className)) score += 18;
+                  if (node.parentElement === container) score += 12;
+
+                  const distance = Math.max(0, stockTop - top);
+                  score += Math.max(0, 18 - Math.min(18, distance / 60));
+
+                  result.push({ label, score });
+                }
+
+                for (const child of container.children) {
+                  if (codesUnder(child).length > 0) continue;
+                  const label = validLabel(child.textContent);
+                  if (label) {
+                    result.push({ label, score: 16 });
+                  }
+                }
+
+                return result.sort((a, b) => b.score - a.score);
+              };
+
+              const output = [];
+
+              for (const { code, element } of stockElements) {
+                const row = element.closest(
+                  'tr, li, article, [role="row"], '
+                  + '[class*="item"], [class*="stock"], [class*="company"]'
+                ) || element;
+
+                let current = row.parentElement;
+                let level = 0;
+
+                while (current && current !== document.body && level < 11) {
+                  const groupCodes = codesUnder(current);
+                  const parentCodes = codesUnder(current.parentElement);
+                  const groupSize = groupCodes.length;
+
+                  if (
+                    groupSize >= 1
+                    && groupSize <= 80
+                    && parentCodes.length > groupSize
+                  ) {
+                    const labels = labelCandidates(current, element);
+                    if (labels.length) {
+                      output.push({
+                        code,
+                        industry: labels[0].label,
+                        strategy: 'dom_container',
+                        score: labels[0].score + Math.max(0, 20 - level),
+                        group_size: groupSize,
+                        market,
+                      });
+                    }
+                  }
+
+                  current = current.parentElement;
+                  level += 1;
+                }
+
+                const table = element.closest('table');
+                if (table) {
+                  const caption = table.querySelector('caption');
+                  const captionLabel = validLabel(caption && caption.textContent);
+
+                  if (captionLabel) {
+                    output.push({
+                      code,
+                      industry: captionLabel,
+                      strategy: 'dom_table',
+                      score: 90,
+                      group_size: codesUnder(table).length,
+                      market,
+                    });
+                  }
+
+                  let sibling = table.previousElementSibling;
+                  let step = 0;
+
+                  while (sibling && step < 5) {
+                    const label = validLabel(sibling.textContent);
+                    if (label && codesUnder(sibling).length === 0) {
+                      output.push({
+                        code,
+                        industry: label,
+                        strategy: 'dom_table_heading',
+                        score: 78 - step * 5,
+                        group_size: codesUnder(table).length,
+                        market,
+                      });
+                      break;
+                    }
+
+                    sibling = sibling.previousElementSibling;
+                    step += 1;
+                  }
+                }
+              }
+
+              return output;
+            }
+            """,
+            market,
+        )
+
+        if candidates:
+            self.dom_candidates.extend(candidates)
+
+    async def collect(
+        self,
+    ) -> tuple[list[Any], list[dict[str, Any]], list[str]]:
         try:
             async with async_playwright() as playwright:
                 browser = await playwright.chromium.launch(
@@ -290,26 +583,13 @@ class HankyungCollector:
                 )
                 await page.wait_for_timeout(4_000)
 
-                for label in ("코스피", "코스닥"):
-                    for locator in (
-                        page.get_by_role("tab", name=label, exact=True),
-                        page.get_by_role("button", name=label, exact=True),
-                        page.get_by_text(label, exact=True),
-                    ):
-                        try:
-                            if await locator.count():
-                                await locator.first.click(timeout=4_000)
-                                await page.wait_for_timeout(1_500)
-                                break
-                        except Exception:
-                            continue
-
-                    for _ in range(20):
-                        await page.evaluate(
-                            "window.scrollTo(0, document.documentElement.scrollHeight)"
-                        )
-                        await page.wait_for_timeout(250)
-                    await page.evaluate("window.scrollTo(0, 0)")
+                for label, market in (
+                    ("코스피", "KOSPI200"),
+                    ("코스닥", "KOSDAQ100"),
+                ):
+                    await self._click_market(page, label)
+                    await self._expand_and_scroll(page)
+                    await self._extract_dom_candidates(page, market)
 
                 for selector in (
                     "script#__NEXT_DATA__",
@@ -318,12 +598,12 @@ class HankyungCollector:
                     try:
                         count = min(await page.locator(selector).count(), 100)
                         for index in range(count):
-                            text = await page.locator(selector).nth(index).text_content()
-                            if not text or not text.lstrip().startswith(("{", "[")):
+                            value = await page.locator(selector).nth(index).text_content()
+                            if not value or not value.lstrip().startswith(("{", "[")):
                                 continue
                             try:
                                 self._append(
-                                    json.loads(text),
+                                    json.loads(value),
                                     f"dom:{selector}:{index}",
                                 )
                             except Exception:
@@ -335,12 +615,119 @@ class HankyungCollector:
         except Exception as exc:
             print(f"WARNING: 한경 데이터 수집 실패: {exc}")
 
-        return self.payloads, self.urls
+        if not self.payloads and not self.dom_candidates:
+            raise RuntimeError("한경 페이지에서 산업 데이터를 수집하지 못했습니다.")
+
+        return self.payloads, self.dom_candidates, self.urls
+
+
+GENERIC_LABEL_ALIASES = {
+    "name", "title", "label", "text", "displayname", "displaytitle",
+    "groupname", "categoryname", "header", "heading",
+}
+
+
+def collect_stock_codes(node: Any, limit: int = 100) -> set[str]:
+    result: set[str] = set()
+
+    def walk(value: Any) -> None:
+        if len(result) > limit:
+            return
+
+        if isinstance(value, dict):
+            code = normalize_code(first_value(value, CODE_ALIASES))
+            if code:
+                result.add(code)
+            for child in value.values():
+                walk(child)
+
+        elif isinstance(value, list):
+            for child in value:
+                walk(child)
+
+    walk(node)
+    return result
+
+
+def generic_group_label(data: dict[str, Any]) -> str | None:
+    for key, value in data.items():
+        if norm_key(key) not in GENERIC_LABEL_ALIASES:
+            continue
+
+        candidate = clean_industry(value)
+        if candidate:
+            return candidate
+
+    return None
+
+
+def mapping_statistics(
+    mapping: dict[str, IndustrySource],
+    eligible: set[str],
+) -> dict[str, Any]:
+    filtered = {
+        code: source
+        for code, source in mapping.items()
+        if code in eligible
+    }
+    counts = Counter(source.industry for source in filtered.values())
+    largest = counts.most_common(1)[0][1] if counts else 0
+
+    return {
+        "coverage": len(filtered),
+        "industry_count": len(counts),
+        "largest_group": largest,
+        "largest_industries": counts.most_common(15),
+    }
+
+
+def plausible_mapping(stats: dict[str, Any]) -> bool:
+    coverage = int(stats["coverage"])
+    industry_count = int(stats["industry_count"])
+    largest = int(stats["largest_group"])
+
+    if coverage < 30:
+        return False
+    if industry_count < 8 or industry_count > 120:
+        return False
+    if largest > max(60, math.ceil(coverage * 0.32)):
+        return False
+
+    return True
 
 
 def extract_hankyung_industries(
     payloads: Iterable[Any],
-) -> dict[str, IndustrySource]:
+    dom_candidates: Iterable[dict[str, Any]],
+    eligible: set[str],
+) -> tuple[dict[str, IndustrySource], dict[str, Any]]:
+    """한경 JSON 구조와 렌더링 DOM에서 산업-종목 매핑을 추출합니다.
+
+    네이버나 KRX의 업종 분류는 사용하지 않습니다.
+    """
+
+    strategy_maps: dict[str, dict[str, IndustrySource]] = defaultdict(dict)
+    strategy_scores: dict[str, dict[str, float]] = defaultdict(dict)
+
+    def put(
+        strategy: str,
+        code: str | None,
+        industry: str | None,
+        score: float,
+    ) -> None:
+        if not code or code not in eligible or not industry:
+            return
+
+        previous = strategy_scores[strategy].get(code, float("-inf"))
+        if score <= previous:
+            return
+
+        strategy_scores[strategy][code] = score
+        strategy_maps[strategy][code] = IndustrySource(
+            industry=industry,
+            source=f"한국경제 데이터센터({strategy})",
+        )
+
     id_lookup: dict[str, str] = {}
 
     for payload in payloads:
@@ -350,9 +737,11 @@ def extract_hankyung_industries(
             if industry and industry_id:
                 id_lookup[industry_id] = industry
 
-    mapping: dict[str, IndustrySource] = {}
-
-    def walk(node: Any, context: str | None = None) -> None:
+    def walk_explicit(
+        node: Any,
+        context: str | None = None,
+        depth: int = 0,
+    ) -> None:
         if isinstance(node, dict):
             local = explicit_industry_name(node) or context
 
@@ -362,23 +751,127 @@ def extract_hankyung_industries(
                     local = id_lookup.get(industry_id)
 
             code = normalize_code(first_value(node, CODE_ALIASES))
-            if code and local:
-                mapping[code] = IndustrySource(
-                    industry=local,
-                    source="한국경제 데이터센터",
-                )
+            put("json_explicit", code, local, 100 + depth)
 
             for value in node.values():
-                walk(value, local)
+                walk_explicit(value, local, depth + 1)
 
         elif isinstance(node, list):
             for value in node:
-                walk(value, context)
+                walk_explicit(value, context, depth + 1)
 
     for payload in payloads:
-        walk(payload)
+        walk_explicit(payload)
 
-    return mapping
+    def walk_groups(node: Any, depth: int = 0) -> None:
+        if isinstance(node, dict):
+            label = explicit_industry_name(node) or generic_group_label(node)
+
+            if label:
+                for key, value in node.items():
+                    if not isinstance(value, (list, dict)):
+                        continue
+
+                    codes = collect_stock_codes(value, limit=90)
+                    if 1 <= len(codes) <= 80:
+                        for code in codes:
+                            put(
+                                "json_group",
+                                code,
+                                label,
+                                70 + min(depth, 20),
+                            )
+
+            for value in node.values():
+                walk_groups(value, depth + 1)
+
+        elif isinstance(node, list):
+            for value in node:
+                walk_groups(value, depth + 1)
+
+    for payload in payloads:
+        walk_groups(payload)
+
+    for candidate in dom_candidates:
+        code = normalize_code(candidate.get("code"))
+        industry = clean_industry(candidate.get("industry"))
+        strategy = str(candidate.get("strategy") or "dom")
+        score = parse_number(candidate.get("score"))
+
+        group_size = int(parse_number(candidate.get("group_size")))
+        if group_size > 80:
+            continue
+
+        put(strategy, code, industry, score)
+
+    stats_by_strategy = {
+        strategy: mapping_statistics(mapping, eligible)
+        for strategy, mapping in strategy_maps.items()
+    }
+
+    plausible_strategies = [
+        strategy
+        for strategy, stats in stats_by_strategy.items()
+        if plausible_mapping(stats)
+    ]
+
+    plausible_strategies.sort(
+        key=lambda strategy: (
+            stats_by_strategy[strategy]["coverage"],
+            stats_by_strategy[strategy]["industry_count"],
+            -stats_by_strategy[strategy]["largest_group"],
+        ),
+        reverse=True,
+    )
+
+    final_mapping: dict[str, IndustrySource] = {}
+
+    if plausible_strategies:
+        base_strategy = plausible_strategies[0]
+        final_mapping.update(strategy_maps[base_strategy])
+
+        for strategy in plausible_strategies[1:]:
+            for code, source in strategy_maps[strategy].items():
+                final_mapping.setdefault(code, source)
+    else:
+        # 전략 단독으로 충분하지 않을 때 종목별 최고 점수 후보를 합칩니다.
+        all_strategies = sorted(
+            strategy_maps,
+            key=lambda strategy: (
+                stats_by_strategy[strategy]["industry_count"] >= 8,
+                stats_by_strategy[strategy]["coverage"],
+            ),
+            reverse=True,
+        )
+
+        for code in eligible:
+            best: tuple[float, IndustrySource] | None = None
+
+            for strategy in all_strategies:
+                source = strategy_maps[strategy].get(code)
+                if source is None:
+                    continue
+
+                score = strategy_scores[strategy].get(code, 0)
+                if best is None or score > best[0]:
+                    best = (score, source)
+
+            if best is not None:
+                final_mapping[code] = best[1]
+
+    final_stats = mapping_statistics(final_mapping, eligible)
+
+    diagnostics = {
+        "strategy_stats": stats_by_strategy,
+        "selected_plausible_strategies": plausible_strategies,
+        "final_stats": final_stats,
+        "payload_count": len(list(payloads)) if not isinstance(payloads, list) else len(payloads),
+        "dom_candidate_count": len(list(dom_candidates))
+        if not isinstance(dom_candidates, list)
+        else len(dom_candidates),
+    }
+
+    return final_mapping, diagnostics
 
 
 def request_text(session: requests.Session, url: str) -> str:
@@ -387,132 +880,6 @@ def request_text(session: requests.Session, url: str) -> str:
     response.encoding = response.apparent_encoding or response.encoding
     return response.text
 
-
-def parse_naver_item_industry(html: str) -> str | None:
-    """종목 상세 페이지의 '동종업종비교(업종명: ...)' 영역에서 업종 추출."""
-
-    soup = BeautifulSoup(html, "html.parser")
-
-    # 가장 안정적인 경로: 업종명 링크 자체를 선택합니다.
-    selectors = (
-        'a[href*="sise_group_detail.naver"][href*="type=upjong"]',
-        'a[href*="sise_group_detail.nhn"][href*="type=upjong"]',
-    )
-
-    for selector in selectors:
-        for link in soup.select(selector):
-            candidate = clean_industry(link.get_text(" ", strip=True))
-            if candidate:
-                return candidate
-
-    # 마크업이 바뀐 경우에도 "업종명 :" 주변의 다음 링크를 확인합니다.
-    for text_node in soup.find_all(
-        string=re.compile(r"업종명\s*:", re.IGNORECASE),
-    ):
-        parent = text_node.parent
-        if parent is None:
-            continue
-
-        for link in parent.find_all("a"):
-            candidate = clean_industry(link.get_text(" ", strip=True))
-            if candidate:
-                return candidate
-
-        next_link = parent.find_next("a")
-        if next_link is not None:
-            candidate = clean_industry(next_link.get_text(" ", strip=True))
-            if candidate:
-                return candidate
-
-    # 마지막 보완: 페이지 전체 텍스트에서 업종명과 재무정보 사이를 추출합니다.
-    page_text = soup.get_text(" ", strip=True)
-    patterns = (
-        r"업종명\s*:\s*(.+?)\s*(?:｜|\||재무정보)",
-        r"동종업종비교\s*\(\s*업종명\s*:\s*(.+?)\s*\)",
-    )
-
-    for pattern in patterns:
-        match = re.search(pattern, page_text, flags=re.IGNORECASE)
-        if not match:
-            continue
-
-        candidate = clean_industry(match.group(1))
-        if candidate:
-            return candidate
-
-    return None
-
-
-def fetch_naver_item_industry(code: str) -> IndustrySource | None:
-    """업종 목록 페이지 대신 개별 종목 페이지에서 업종을 직접 조회."""
-
-    last_error: Exception | None = None
-
-    for attempt in range(3):
-        session = requests.Session()
-
-        try:
-            response = session.get(
-                NAVER_ITEM_URL.format(code=code),
-                headers=HEADERS,
-                timeout=25,
-            )
-            response.raise_for_status()
-
-            # 네이버 금융 구형 페이지는 EUC-KR인 경우가 있어 명시적으로 보완합니다.
-            content_type = response.headers.get("content-type", "").lower()
-            if "charset=" not in content_type:
-                response.encoding = response.apparent_encoding or "euc-kr"
-
-            industry = parse_naver_item_industry(response.text)
-            if industry:
-                return IndustrySource(
-                    industry=industry,
-                    source="네이버 금융 종목별 업종 보완",
-                )
-
-            last_error = RuntimeError("종목 페이지에서 업종명을 찾지 못했습니다.")
-        except Exception as exc:
-            last_error = exc
-
-        if attempt < 2:
-            time.sleep(0.6 * (attempt + 1))
-
-    print(f"WARNING: 네이버 종목별 업종 조회 실패({code}): {last_error}")
-    return None
-
-
-def collect_naver_industries(
-    eligible: set[str],
-) -> dict[str, IndustrySource]:
-    """각 종목 상세 페이지에서 업종을 직접 수집합니다.
-
-    기존 업종 목록 페이지는 마크업 변경으로 링크가 1개만 잡히는 문제가
-    발생했으므로 더 이상 사용하지 않습니다.
-    """
-
-    mapping: dict[str, IndustrySource] = {}
-
-    with ThreadPoolExecutor(max_workers=8) as executor:
-        futures = {
-            executor.submit(fetch_naver_item_industry, code): code
-            for code in eligible
-        }
-
-        for future in as_completed(futures):
-            code = futures[future]
-
-            try:
-                source = future.result()
-            except Exception as exc:
-                print(f"WARNING: 네이버 종목별 업종 작업 실패({code}): {exc}")
-                continue
-
-            if source is not None:
-                mapping[code] = source
-
-    print(f"네이버 종목별 업종 매핑: {len(mapping)}/{len(eligible)}개")
-    return mapping
 
 
 def valid_trade_date() -> str:
@@ -951,7 +1318,7 @@ def build_output(
             "source": (
                 "종목군: KODEX 200·KODEX 코스닥150 ETF PDF / "
                 "시가총액·종가·등락률: 네이버 증권 / "
-                "업종: 한국경제 데이터센터 우선"
+                "업종: 한국경제 데이터센터 FACTSET 분류"
             ),
             "methodology": (
                 "KODEX 200 전체 국내주식과 KODEX 코스닥150 "
@@ -976,14 +1343,13 @@ def write_diagnostics(
     kospi: set[str],
     kosdaq: set[str],
     market_data: dict[str, MarketData],
-    hankyung: dict[str, IndustrySource],
-    naver: dict[str, IndustrySource],
-    final_mapping: dict[str, IndustrySource],
+    hankyung_mapping: dict[str, IndustrySource],
+    extraction_diagnostics: dict[str, Any],
     urls: list[str],
 ) -> None:
     counts = Counter(
         source.industry
-        for code, source in final_mapping.items()
+        for code, source in hankyung_mapping.items()
         if code in eligible
     )
 
@@ -998,14 +1364,13 @@ def write_diagnostics(
             for code, data in market_data.items()
             if code in eligible
         ),
-        "hankyung_industry_count": len(eligible & set(hankyung)),
-        "naver_industry_count": len(eligible & set(naver)),
-        "final_industry_count": len(eligible & set(final_mapping)),
+        "hankyung_industry_count": len(eligible & set(hankyung_mapping)),
         "industry_group_count": len(counts),
         "largest_industries": counts.most_common(20),
         "missing_market_data": sorted(eligible - set(market_data)),
-        "missing_industry": sorted(eligible - set(final_mapping)),
-        "captured_hankyung_urls": sorted(set(urls))[:200],
+        "missing_industry": sorted(eligible - set(hankyung_mapping)),
+        "captured_hankyung_urls": sorted(set(urls))[:250],
+        "hankyung_extraction": extraction_diagnostics,
     }
 
     DIAGNOSTICS.parent.mkdir(parents=True, exist_ok=True)
@@ -1024,36 +1389,33 @@ async def main() -> None:
     kospi, kosdaq, etf_scores = get_universe(trade_date)
     eligible = kospi | kosdaq
 
+    # 네이버에서는 가격·등락률·시가총액만 조회합니다.
     market_data = collect_market_data(eligible)
 
+    # 산업 분류는 한국경제 데이터센터에서만 가져옵니다.
     collector = HankyungCollector()
-    payloads, urls = await collector.collect()
-    hankyung_mapping = extract_hankyung_industries(payloads)
-
-    print(
-        f"한경 업종 매핑: "
-        f"{len(eligible & set(hankyung_mapping))}/{len(eligible)}개"
+    payloads, dom_candidates, urls = await collector.collect()
+    hankyung_mapping, extraction_diagnostics = extract_hankyung_industries(
+        payloads=payloads,
+        dom_candidates=dom_candidates,
+        eligible=eligible,
     )
 
-    naver_mapping = collect_naver_industries(eligible)
-
-    final_mapping: dict[str, IndustrySource] = {
-        code: source
-        for code, source in hankyung_mapping.items()
-        if code in eligible
-    }
-
-    for code, source in naver_mapping.items():
-        final_mapping.setdefault(code, source)
+    final_stats = extraction_diagnostics.get("final_stats", {})
+    print(
+        "한경 산업 매핑: "
+        f"{final_stats.get('coverage', 0)}/{len(eligible)}개, "
+        f"{final_stats.get('industry_count', 0)}개 산업, "
+        f"최대 산업 {final_stats.get('largest_group', 0)}개"
+    )
 
     write_diagnostics(
         eligible=eligible,
         kospi=kospi,
         kosdaq=kosdaq,
         market_data=market_data,
-        hankyung=hankyung_mapping,
-        naver=naver_mapping,
-        final_mapping=final_mapping,
+        hankyung_mapping=hankyung_mapping,
+        extraction_diagnostics=extraction_diagnostics,
         urls=urls,
     )
 
@@ -1063,7 +1425,7 @@ async def main() -> None:
         kosdaq=kosdaq,
         etf_scores=etf_scores,
         market_data=market_data,
-        industries=final_mapping,
+        industries=hankyung_mapping,
     )
 
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
