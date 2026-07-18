@@ -18,7 +18,7 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
 
     steps:
       - name: 저장소 받기
@@ -52,17 +52,20 @@ jobs:
           KRX_PW: ${{ secrets.KRX_PW }}
         run: |
           if [ -z "$KRX_ID" ] || [ -z "$KRX_PW" ]; then
-            echo "KRX_ID 또는 KRX_PW GitHub Secret이 없습니다."
+            echo "KRX_ID 또는 KRX_PW Secret이 없습니다."
             exit 1
           fi
           echo "KRX 로그인 Secret 확인 완료"
 
-      - name: 장 마감 데이터 생성
+      - name: ETF 구성종목 및 장 마감 데이터 생성
         env:
           TZ: Asia/Seoul
-          MIN_MATCHED_STOCKS: "250"
           KRX_ID: ${{ secrets.KRX_ID }}
           KRX_PW: ${{ secrets.KRX_PW }}
+          KOSPI_ETF_CODE: "069500"
+          KOSDAQ_ETF_CODE: "229200"
+          KOSDAQ_ETF_LIMIT: "100"
+          MIN_MATCHED_STOCKS: "250"
         run: python update_data.py
 
       - name: 생성 결과 확인
@@ -79,22 +82,47 @@ jobs:
           meta = data.get("meta", {})
           industries = data.get("industries", [])
 
+          kospi_count = int(meta.get("kospi200_target", 0))
+          kosdaq_count = int(meta.get("kosdaq100_target", 0))
           matched = int(meta.get("matched_stocks", 0))
-          industry_count = len(industries)
           largest = max(
               (len(item.get("stocks", [])) for item in industries),
               default=0,
           )
+          positive_caps = sum(
+              stock.get("market_cap", 0) > 0
+              for industry in industries
+              for stock in industry.get("stocks", [])
+          )
 
-          print(f"매칭 종목: {matched}개")
-          print(f"산업 수: {industry_count}개")
+          print(f"KODEX 200 구성종목: {kospi_count}개")
+          print(f"KODEX 코스닥150 비중 상위: {kosdaq_count}개")
+          print(f"최종 매칭 종목: {matched}개")
+          print(f"산업 수: {len(industries)}개")
+          print(f"시가총액 보유 종목: {positive_caps}개")
           print(f"가장 큰 산업: {largest}개 기업")
 
+          if kospi_count < 180:
+              raise SystemExit(
+                  f"KODEX 200 구성종목이 너무 적습니다: {kospi_count}개"
+              )
+          if kosdaq_count < 95:
+              raise SystemExit(
+                  f"코스닥 ETF 상위 종목이 너무 적습니다: {kosdaq_count}개"
+              )
           if matched < 250:
-              raise SystemExit(f"매칭 종목이 너무 적습니다: {matched}개")
-          if industry_count < 10:
-              raise SystemExit(f"산업 수가 너무 적습니다: {industry_count}개")
-          if largest > 55:
+              raise SystemExit(
+                  f"최종 매칭 종목이 너무 적습니다: {matched}개"
+              )
+          if positive_caps < 230:
+              raise SystemExit(
+                  f"시가총액 데이터가 너무 적습니다: {positive_caps}개"
+              )
+          if len(industries) < 10:
+              raise SystemExit(
+                  f"산업 수가 너무 적습니다: {len(industries)}개"
+              )
+          if largest > 60:
               raise SystemExit(
                   f"한 산업에 종목이 너무 많이 몰렸습니다: {largest}개"
               )
@@ -104,7 +132,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: hankyung-sector-diagnostics
+          name: hankyung-etf-diagnostics
           path: data/diagnostics.json
           if-no-files-found: ignore
           retention-days: 7
@@ -119,7 +147,7 @@ jobs:
             git config user.name "github-actions[bot]"
             git config user.email \
               "41898282+github-actions[bot]@users.noreply.github.com"
-            git commit -m "fix: 산업별 장 마감 데이터 갱신"
+            git commit -m "fix: ETF 구성종목 기준 산업 데이터 갱신"
             git push
           fi
 
@@ -127,9 +155,11 @@ jobs:
         run: |
           rm -rf _site
           mkdir -p _site/data
+
           cp index.html styles.css app.js _site/
           cp data/data.json _site/data/
           touch _site/.nojekyll
+
           find _site -maxdepth 3 -type f | sort
 
       - name: GitHub Pages 설정
