@@ -1,20 +1,15 @@
 name: 산업별 시장 대시보드 갱신
 
 on:
-  # Actions 화면에서 직접 실행할 수 있게 설정
   workflow_dispatch:
-
-  # 평일 장 마감 후 자동 실행
   schedule:
-    # GitHub Actions cron은 UTC 기준
-    # 07:05 UTC = 한국시간 16:05
+    # GitHub Actions cron은 UTC 기준입니다.
+    # 평일 07:05 UTC = 한국시간 16:05
     - cron: "5 7 * * 1-5"
 
-# Actions가 갱신된 data.json을 저장소에 커밋할 수 있도록 허용
 permissions:
   contents: write
 
-# 이전 작업이 실행 중일 때 중복 실행 방지
 concurrency:
   group: sector-dashboard-update
   cancel-in-progress: false
@@ -22,46 +17,47 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
-      # 저장소 파일 불러오기
       - name: 저장소 받기
         uses: actions/checkout@v4
 
-      # Python 설치
+      - name: 필수 파일 확인
+        run: |
+          echo "저장소 파일 목록"
+          find . -maxdepth 3 -type f | sort
+          test -f requirements.txt || (echo "requirements.txt가 없습니다." && exit 1)
+          test -f scripts/update_data.py || (echo "scripts/update_data.py가 없습니다." && exit 1)
+
       - name: Python 설정
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
 
-      # 필요한 라이브러리와 브라우저 설치
       - name: 패키지 설치
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           python -m playwright install --with-deps chromium
 
-      # 한경·KRX 데이터 수집 후 data.json 생성
       - name: 장 마감 데이터 생성
         env:
           TZ: Asia/Seoul
           MIN_MATCHED_STOCKS: "250"
-        run: |
-          python scripts/update_data.py
+        run: python scripts/update_data.py
 
-      # 변경된 데이터가 있으면 자동으로 저장소에 반영
       - name: 변경 파일 커밋
         run: |
-          if git diff --quiet -- data/data.json; then
+          git add data/data.json
+
+          if git diff --cached --quiet; then
             echo "변경된 데이터가 없습니다."
             exit 0
           fi
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          git add data/data.json
           git commit -m "chore: 장 마감 산업 데이터 갱신"
           git push
